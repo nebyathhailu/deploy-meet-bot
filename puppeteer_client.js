@@ -37,7 +37,8 @@ module.exports = async function startBot() {
   console.log("Opening Meet URL:", config.BOT_MEET_URL);
   await page.goto(config.BOT_MEET_URL, { waitUntil: 'networkidle2' });
   // Wait for page to be fully loaded (adjust selector checks as needed)
-  await page.waitForTimeout(4000);
+  // await page.waitForTimeout(4000);
+  await new Promise(resolve => setTimeout(resolve, 5000))
   // Inject the page side script that captures audio and streams blobs
   await page.evaluate(PAGE_SCRIPT);
   console.log("Injected capture script. Bot is now listening for audio...");

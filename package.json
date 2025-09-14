@@ -4,13 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "dependencies": {
-    "puppeteer": "^21.0.0",
-    "@google-cloud/speech": "^5.6.0",
-    "axios":"^1.4.0",
-    "dotenv":"^16.0.0"
   },
   "repository": {
     "type": "git",
@@ -22,5 +17,11 @@
   "bugs": {
     "url": "https://github.com/nebyathhailu/meet-bot-service/issues"
   },
-  "homepage": "https://github.com/nebyathhailu/meet-bot-service#readme"
+  "homepage": "https://github.com/nebyathhailu/meet-bot-service#readme",
+  "dependencies": {
+    "@google-cloud/speech": "^7.2.0",
+    "axios": "^1.12.2",
+    "dotenv": "^17.2.2",
+    "puppeteer": "^24.20.0"
+  }
 }
