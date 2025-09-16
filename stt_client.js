@@ -9,7 +9,6 @@ async function webmBase64ToWavBuffer(base64) {
   const tmpIn = path.join(os.tmpdir(), `chunk-${Date.now()}.webm`);
   const tmpOut = path.join(os.tmpdir(), `chunk-${Date.now()}.wav`);
   fs.writeFileSync(tmpIn, webmBuffer);
-  // ffmpeg -i input.webm -ar 16000 -ac 1 -f wav output.wav
   await new Promise((resolve, reject) => {
     const ff = spawn('ffmpeg', [
       '-y', '-i', tmpIn,
@@ -20,8 +19,7 @@ async function webmBase64ToWavBuffer(base64) {
       tmpOut
     ]);
     ff.stderr.on('data', data => {
-      // uncomment to debug:
-      // console.log('ffmpeg:', data.toString());
+      console.log('ffmpeg:', data.toString());
     });
     ff.on('exit', (code) => {
       if (code === 0) resolve();
@@ -29,7 +27,6 @@ async function webmBase64ToWavBuffer(base64) {
     });
   });
   const wavBuffer = fs.readFileSync(tmpOut);
-  // cleanup
   try { fs.unlinkSync(tmpIn); } catch(e) {}
   try { fs.unlinkSync(tmpOut); } catch(e) {}
   return wavBuffer;

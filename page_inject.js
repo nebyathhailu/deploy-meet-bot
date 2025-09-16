@@ -1,5 +1,3 @@
-// NOTE: This file is read and evaluated in page context by puppeteer.
-// It assumes puppeteer exposed 'sendAudioChunkToNode' to window.
 (async () => {
   console.log("Page injector: starting audio capture...");
   function arrayBufferToBase64(buffer) {
@@ -12,7 +10,6 @@
     return btoa(binary);
   }
   try {
-    // capture the tab/system audio (video: false)
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: false, audio: true });
     const options = { mimeType: 'audio/webm;codecs=opus' };
     const recorder = new MediaRecorder(stream, options);
@@ -20,7 +17,6 @@
       if (!event.data || event.data.size === 0) return;
       const ab = await event.data.arrayBuffer();
       const base64 = arrayBufferToBase64(ab);
-      // Call Node-exposed function with base64 chunk
       if (window.sendAudioChunkToNode) {
         try {
           window.sendAudioChunkToNode(base64);
@@ -31,21 +27,9 @@
         console.warn('sendAudioChunkToNode not available on window');
       }
     };
-    // start. emit chunks every ~1s (adjust by setting timeslice)
     recorder.start(1000);
     console.log("MediaRecorder started (audio/webm;codecs=opus).");
   } catch (err) {
     console.error("getDisplayMedia failed:", err);
   }
 })();
-
-
-
-
-
-
-
-
-
-
-

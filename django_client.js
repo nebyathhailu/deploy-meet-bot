@@ -19,14 +19,3 @@ module.exports.sendTranscript = async (interviewId, transcriptText) => {
     return null;
   }
 };
-
-
-
-
-
-
-
-
-
-
-
