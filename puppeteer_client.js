@@ -6,158 +6,122 @@ const config = require('./config');
 const sttClient = require('./stt_client');
 const djangoClient = require('./django_client');
 const PAGE_SCRIPT = fs.readFileSync(path.join(__dirname, 'page_inject.js'), 'utf8');
-
+const log = {
+  info: (msg) => console.log(`[INFO] ${msg}`),
+  error: (msg) => console.error(`[ERROR] ${msg}`),
+  warn: (msg) => console.warn(`[WARN] ${msg}`),
+  success: (msg) => console.log(`\u2705 ${msg}`),
+};
 module.exports = async function startBot() {
   let browser;
   let userDataDir;
-  
   if (config.BOT_CHROME_PROFILE) {
-    console.log("Using Chrome profile:", config.BOT_CHROME_PROFILE);
+    log.info(`Using Chrome profile: ${config.BOT_CHROME_PROFILE}`);
     userDataDir = config.BOT_CHROME_PROFILE;
   } else {
     userDataDir = path.join(os.tmpdir(), 'chrome-profile-' + Date.now());
     fs.mkdirSync(userDataDir, { recursive: true });
-    console.log("Created temporary Chrome profile:", userDataDir);
-    
-    if (config.BOT_EMAIL && config.BOT_PASSWORD) {
-      console.log("Setting up authenticated session...");
-      
-      browser = await puppeteer.launch({
-        headless: false, 
-        args: [
-          `--user-data-dir=${userDataDir}`,
-          '--use-fake-ui-for-media-stream',         
-          '--allow-http-screen-capture',
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--autoplay-policy=no-user-gesture-required'
-        ]
-      });
-      
-      const page = await browser.newPage();
-      
-      try {
-        await page.goto('https://accounts.google.com/signin');
-        
-        await page.waitForSelector('input[type="email"]', { visible: true, timeout: 10000 });
-        await page.type('input[type="email"]', config.BOT_EMAIL);
-        
-        await page.evaluate(() => {
-          const selectors = ['#identifierNext', 'button[aria-label="Next"]', 'button[jsname="LgbsSe"]'];
-          for (const selector of selectors) {
-            const button = document.querySelector(selector);
-            if (button) {
-              button.click();
-              return true;
-            }
-          }
-          return false;
-        });
-        
-        await page.waitForSelector('input[type="password"]', { visible: true, timeout: 10000 });
-        await page.type('input[type="password"]', config.BOT_PASSWORD);
-        
-        await page.evaluate(() => {
-          const selectors = ['#passwordNext', 'button[aria-label="Next"]', 'button[jsname="LgbsSe"]'];
-          for (const selector of selectors) {
-            const button = document.querySelector(selector);
-            if (button) {
-              button.click();
-              return true;
-            }
-          }
-          return false;
-        });
-        
-        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 });
-        console.log(" Logged in successfully");
-        
-        await page.goto('https://google.com');
-        await page.waitForTimeout(3000);
-        
-        await browser.close();
-      } catch (error) {
-        console.error("Login process failed:", error.message);
-        await page.screenshot({ path: 'login-error.png' });
-        await browser.close();
-        
-        console.log("Continuing without login...");
-      }
-    }
+    log.info(`Created temporary Chrome profile: ${userDataDir}`);
   }
-  
   browser = await puppeteer.launch({
-    headless: false, 
+    headless: false,
     args: [
       `--user-data-dir=${userDataDir}`,
-      '--use-fake-ui-for-media-stream',         
+      '--use-fake-ui-for-media-stream',
       '--allow-http-screen-capture',
       '--no-sandbox',
       '--disable-setuid-sandbox',
-      '--autoplay-policy=no-user-gesture-required'
+      '--disable-dev-shm-usage',
+      '--autoplay-policy=no-user-gesture-required',
+      '--allow-file-access-from-files',
+      '--use-pulseaudio',
     ]
   });
-  
   const page = await browser.newPage();
-  
-  page.on('console', msg => console.log('PAGE LOG:', msg.text()));
-  page.on('pageerror', error => console.log('PAGE ERROR:', error.message));
-  
-  await page.exposeFunction('sendAudioChunkToNode', async (base64Chunk) => {
-    try {
-      const transcript = await sttClient.processWebmChunk(base64Chunk, config.INTERVIEW_ID);
-      if (transcript && transcript.trim().length > 0) {
-        console.log(`\n🎤 TRANSCRIPTION: ${transcript}\n`);
-        await djangoClient.sendTranscript(config.INTERVIEW_ID, transcript);
-      }
-    } catch (err) {
-      console.error("Error processing chunk:", err);
-    }
-  });
+  page.on('console', msg => log.info(`PAGE LOG: ${msg.text()}`));
+  page.on('pageerror', error => log.error(`PAGE ERROR: ${error.message}`));
 
-  console.log("Opening Meet URL:", config.BOT_MEET_URL);
+let conversationState = {
+  fullTranscript: '',
+  currentQuestion: '',
+  candidateAnswer: ''
+};
+
+await page.exposeFunction('sendAudioChunkToNode', async (base64Chunk) => {
+  try {
+    const transcriptData = await sttClient.processWebmChunk(base64Chunk, config.INTERVIEW_ID);
+    
+    if (transcriptData.fullTranscript) {
+      conversationState.fullTranscript += (conversationState.fullTranscript ? ' ' : '') + transcriptData.fullTranscript;
+      
+      if (transcriptData.currentQuestion) {
+        conversationState.currentQuestion = transcriptData.currentQuestion;
+        conversationState.candidateAnswer = '';
+      }
+      
+      if (transcriptData.candidateAnswer) {
+        conversationState.candidateAnswer += (conversationState.candidateAnswer ? ' ' : '') + transcriptData.candidateAnswer;
+      }
+      
+      log.success(`TRANSCRIPTION: ${transcriptData.fullTranscript}`);
+      console.log("About to send transcript to Django..."); 
+      
+      const response = await djangoClient.sendTranscript(
+        config.INTERVIEW_ID, 
+        {
+          fullTranscript: conversationState.fullTranscript,
+          currentQuestion: conversationState.currentQuestion,
+          candidateAnswer: conversationState.candidateAnswer
+        }
+      );
+      
+      if (response) {
+        console.log("Transcript sent successfully.");
+      } else {
+        console.warn("Failed to send transcript.");
+      }
+    } else {
+    }
+  } catch (err) {
+    log.error(`Error processing chunk: ${err}`);
+  }
+});
+
+  log.info(`Opening Meet URL: ${config.BOT_MEET_URL}`);
   await page.goto(config.BOT_MEET_URL, { waitUntil: 'networkidle2' });
-  
-  await page.screenshot({ path: 'meet-debug.png' });
-  console.log("Saved screenshot to meet-debug.png");
-  
+  // await page.screenshot({ path: 'meet-debug.png' });
+  // log.info("Saved screenshot to meet-debug.png");
   const cantJoinText = await page.evaluate(() => {
     return document.body.innerText.includes("You can't join this video call");
   });
-  
   if (cantJoinText) {
-    console.error(" Bot cannot join the meeting. Possible reasons:");
-    console.error("- The meeting is restricted to specific users");
-    console.error("- The meeting URL is expired or invalid");
-    console.error("- The bot account doesn't have permission to join");
-    console.error("- The meeting hasn't started yet");
-    
+    log.error("Bot cannot join the meeting. Possible reasons:");
+    log.error("- Meeting restricted / expired / bot lacks permission");
     try {
       await page.waitForSelector('button[aria-label="Return to home screen"]', { timeout: 5000 });
       await page.click('button[aria-label="Return to home screen"]');
-      console.log("Returned to home screen");
-    } catch (e) {
-      console.log("Could not find return button");
+      log.info("Returned to home screen");
+    } catch {
+      log.warn("Could not find return button");
     }
-    
     return;
   }
-  
   await new Promise(resolve => setTimeout(resolve, 5000))
-  
   try {
-    console.log("Attempting to join the meeting...");
-    
+    log.info("Attempting to join the meeting...");
     const joinClicked = await page.evaluate(() => {
       const selectors = [
-        '[data-is-muted]', 
+        'button[jsname="Qx7uuf"][aria-label="Join now"]',
+        'button[jsname="Qx7uuf"]',
+        'button[jscontroller="0626Fe"]',
+        'button[data-idom-class*="QJgqC"]',
+        'button[data-tooltip-enabled="true"]',
+        'button[class*="UywwFc-LgbsSe"]',
         '[aria-label*="Join now"]',
         '[aria-label*="Ask to join"]',
-        'button[jsname*="Qx7uuf"]',
-        'button[aria-label*="Join meeting"]',
+        '[aria-label*="Join meeting"]',
         'button[data-testid*="join"]'
       ];
-      
       for (const selector of selectors) {
         const button = document.querySelector(selector);
         if (button) {
@@ -165,7 +129,6 @@ module.exports = async function startBot() {
           return { success: true, method: `selector: ${selector}` };
         }
       }
-      
       const buttons = Array.from(document.querySelectorAll('button'));
       for (const button of buttons) {
         if (button.textContent.toLowerCase().includes('join')) {
@@ -173,34 +136,28 @@ module.exports = async function startBot() {
           return { success: true, method: 'text content' };
         }
       }
-      
       return { success: false, method: 'none' };
     });
-    
     if (joinClicked.success) {
-      console.log(` Clicked join button using ${joinClicked.method}`);
+      log.success(`Clicked join button using ${joinClicked.method}`);
     } else {
       throw new Error("Could not find join button");
     }
-    
-    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 });
-    console.log(" Successfully joined the meeting");
-    
-    await page.screenshot({ path: 'meeting-joined.png' });
-    console.log("Saved screenshot to meeting-joined.png");
-    
+    log.success("Successfully joined the meeting");
+    // await page.screenshot({ path: 'meeting-joined.png' });
+    // log.info("Saved screenshot to meeting-joined.png");
   } catch (error) {
-    console.error("Error joining the meeting:", error.message);
+    log.error(`Error joining the meeting: ${error.message}`);
     await page.screenshot({ path: 'join-error.png' });
-    console.log("Saved error screenshot to join-error.png");
-    
+    log.info("Saved error screenshot to join-error.png");
     return;
   }
-  
-  await page.waitForTimeout(5000);
-  
-  await page.evaluate(PAGE_SCRIPT);
-  console.log("Injected capture script. Bot is now listening for audio...");
-  
-  console.log("Bot is active. Press Ctrl+C to stop.");
+  await new Promise(resolve => setTimeout(resolve, 5000))
+  try {
+    await page.evaluate(PAGE_SCRIPT);
+    log.success("Injected capture script. Bot is now listening for audio...");
+  } catch (err) {
+    log.error(`Failed to inject capture script: ${err.message}`);
+  }
+  log.info("Bot is active. Press Ctrl+C to stop.");
 };

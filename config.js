@@ -7,6 +7,6 @@ module.exports = {
   BOT_EMAIL: process.env.BOT_EMAIL,                   
   BOT_PASSWORD: process.env.BOT_PASSWORD,             
   BOT_MEET_URL: process.env.BOT_GOOGLE_MEET_URL,
-  INTERVIEW_ID: process.env.INTERVIEW_ID || null,
+  INTERVIEW_ID: process.env.INTERVIEW_ID,
   MEDIA_CHUNK_MS: Number(process.env.MEDIA_CHUNK_MS || 1000)
 };

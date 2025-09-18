@@ -4,8 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "concurrently \"node display-server.js\" \"node index.js\"",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "display": "node display-server.js"
   },
   "repository": {
     "type": "git",
@@ -20,8 +21,18 @@
   "homepage": "https://github.com/nebyathhailu/meet-bot-service#readme",
   "dependencies": {
     "@google-cloud/speech": "^7.2.0",
+    "@google/genai": "^1.20.0",
     "axios": "^1.12.2",
     "dotenv": "^17.2.2",
-    "puppeteer": "^24.20.0"
+    "express": "^5.1.0",
+    "node-record-lpcm16": "^1.0.1",
+    "openai": "^5.21.0",
+    "puppeteer": "^24.21.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }

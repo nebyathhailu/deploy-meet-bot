@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Transcript & Insights Dashboard</title>
+<style>
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #1a1a1a;
+        color: #ffffff;
+        margin: 0;
+        padding: 20px;
+        line-height: 1.6;
+    }
+    .container {
+        max-width: 950px;
+        margin: 0 auto;
+        background-color: #2d2d2d;
+        border-radius: 10px;
+        padding: 25px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    }
+    h1 {
+        color: #4a9eff;
+        text-align: center;
+        margin-bottom: 30px;
+        font-weight: 300;
+    }
+    .transcript-container {
+        height: 600px;
+        overflow-y: auto;
+        background-color: #1e1e1e;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    .line {
+        margin-bottom: 15px;
+        padding: 12px;
+        border-radius: 6px;
+        animation: fadeIn 0.5s;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .timestamp {
+        color: #888;
+        font-size: 0.8em;
+        margin-bottom: 5px;
+    }
+    .question {
+        background-color: #2a3f5f;
+        border-left: 5px solid #4a9eff;
+        font-weight: bold;
+        padding-left: 10px;
+    }
+    .answer {
+        background-color: #3a3a3a;
+        border-left: 5px solid #f4a261;
+        margin-left: 20px;
+        padding-left: 10px;
+    }
+    .insights {
+        background-color: #272727;
+        border-left: 5px solid #ffd966;
+        margin-left: 40px;
+        padding: 8px 10px;
+        font-size: 0.9em;
+        color: #ffd966;
+    }
+    .status {
+        text-align: center;
+        padding: 10px;
+        background-color: #3a3a3a;
+        border-radius: 6px;
+        margin-top: 20px;
+    }
+    .controls {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        margin-top: 20px;
+    }
+    button {
+        background-color: #4a9eff;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 1em;
+        transition: background-color 0.3s;
+    }
+    button:hover { background-color: #3a8eef; }
+    .clear-btn { background-color: #ff4a4a; }
+    .clear-btn:hover { background-color: #ef3a3a; }
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>Live Transcript & Insights Dashboard</h1>
+    <div class="transcript-container" id="transcript-container"></div>
+    <div class="controls">
+        <button id="pause-btn">Pause Updates</button>
+        <button id="clear-btn" class="clear-btn">Clear Transcript</button>
+    </div>
+    <div class="status" id="status">Waiting for transcript data...</div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+    const transcriptContainer = document.getElementById('transcript-container');
+    const statusElement = document.getElementById('status');
+    const pauseBtn = document.getElementById('pause-btn');
+    const clearBtn = document.getElementById('clear-btn');
+
+    let isPaused = false;
+
+    socket.on('connect', () => {
+        statusElement.textContent = 'Connected to transcript server';
+        statusElement.style.color = '#4a9eff';
+    });
+
+    socket.on('disconnect', () => {
+        statusElement.textContent = 'Disconnected from transcript server';
+        statusElement.style.color = '#ff4a4a';
+    });
+
+    socket.on('data-update', (data) => {
+        if (isPaused) return;
+
+        // Create container for this update
+        const line = document.createElement('div');
+        line.className = 'line';
+
+        const timestamp = new Date(data.timestamp || Date.now()).toLocaleTimeString();
+        line.innerHTML = `<div class="timestamp">${timestamp}</div>`;
+
+        // Question
+        if (data.current_question) {
+            const qDiv = document.createElement('div');
+            qDiv.className = 'question';
+            qDiv.textContent = `Q: ${data.current_question}`;
+            line.appendChild(qDiv);
+        }
+
+        // Answer
+        if (data.candidate_answer) {
+            const aDiv = document.createElement('div');
+            aDiv.className = 'answer';
+            aDiv.textContent = `A: ${data.candidate_answer}`;
+            line.appendChild(aDiv);
+        }
+
+        // Insights
+        if (data.insights) {
+            if (data.insights.keywords?.length) {
+                const kwDiv = document.createElement('div');
+                kwDiv.className = 'insights';
+                kwDiv.textContent = `Keywords: ${data.insights.keywords.join(', ')}`;
+                line.appendChild(kwDiv);
+            }
+            if (data.insights.latestAnalysis) {
+                const anaDiv = document.createElement('div');
+                anaDiv.className = 'insights';
+                anaDiv.textContent = `Analysis: ${data.insights.latestAnalysis}`;
+                line.appendChild(anaDiv);
+            }
+        }
+
+        transcriptContainer.insertBefore(line, transcriptContainer.firstChild);
+
+        while (transcriptContainer.children.length > 100) {
+            transcriptContainer.removeChild(transcriptContainer.lastChild);
+        }
+
+        statusElement.textContent = 'Receiving live transcript and insights...';
+    });
+
+    pauseBtn.addEventListener('click', () => {
+        isPaused = !isPaused;
+        pauseBtn.textContent = isPaused ? 'Resume Updates' : 'Pause Updates';
+        statusElement.textContent = isPaused ? 'Updates paused' : 'Receiving live transcript and insights...';
+    });
+
+    clearBtn.addEventListener('click', () => {
+        transcriptContainer.innerHTML = '';
+        statusElement.textContent = 'Transcript cleared';
+    });
+</script>
+</body>
+</html>
